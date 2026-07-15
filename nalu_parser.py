@@ -80,7 +80,9 @@ def extract_nalus_chunk(data):
 
 # Extraer tipo de NALU
 def nalu_type(nalu):
-    return nalu[0] & 0x1F
+    #Pasar bytes a elementos hasheables
+    nalu_hashable = bytes(nalu)
+    return nalu_hashable[0] & 0x1F
 
 def nalu_type_name(nal_type):
     names = {

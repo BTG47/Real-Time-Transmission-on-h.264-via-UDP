@@ -29,7 +29,7 @@ def update_flag(flag):
     # Flag = 3 Es para el final de un paquete segmentado
     # Flag = 4 Es para indicar el final de la transmisión
 
-def packetize(nalu, nal_type, flag, actual_sequence, payload_size):
+def packetize(nalu, nal_type, flag, actual_sequence, payload_size, priority):
     """
     Encargado de recibir un paquete grande de NALU y romperlo en NALUS pequeñas conservando su 
     sequencia con un paquete sencillo, dicho paquete es temporal y luego se recuperan los datos para el 
