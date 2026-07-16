@@ -1,7 +1,6 @@
 import subprocess
 from nalu_parser import extract_nalus_chunk, nalu_type, nalu_type_name
-from sender_nalu import initialize_connection, send_nalu, send_nalu_paquetized, send_single_header
-from packetizer import packetize
+from packetizer import Paketizer
 from ffmpeg_video_source import FfmpegVideoSource
 from udp_transport import UdpTransport
 from priority_classifier import obtain_classification_nalu
@@ -16,7 +15,8 @@ def print_nalu(idx, type_nalu, nalu_name):
     print(f"Nombre de nalu: {nalu_name}")
     print(f"Tam {len(nalu)}")
 
-transport = UdpTransport()
+Transport = UdpTransport()
+LogicPacket = Paketizer()
 source = None
 
 print("Listening to /dev/video0... Parsing incoming NAL Units:\n")
@@ -35,23 +35,25 @@ try:
 
                 print_nalu(idx, numeric_type_nalu, nalu_name)
 
-                # Variables default para el paquete
-                default_flag = 0 
-                default_sequence = 0
-                default_payload = len(nalu)
-
                 # Packetizar los nalu en nalus del mismo tamaño
-                nalus_segmented = packetize(nalu, numeric_type_nalu, default_flag, 
-                                            default_sequence, default_payload, priority)
+                nalus_segmented = LogicPacket.packetize(nalu, numeric_type_nalu, priority)
 
                 for single_nalu_seg in nalus_segmented:
                     # Extraer datos del single_nalu_seg
-                    transport.send_packet(single_nalu_seg)
+                    Transport.send_packet(single_nalu_seg)
 
 except KeyboardInterrupt:
     print("Acabando el proceso...")
-    if source:
-        transport.send_single_header(0,0,4,0)
+    # Debido a que ya no hay flags, de momento no se puede reconstrir el video
+    #if source:
+    #    Transport.send_single_header(nalu_packet_sequence= 0,
+    #                                 nalu_id=,
+    #                                 nalu_fragment_index=,
+    #                                 nalu_fragment_count=,
+    #                                 nalu_type=,
+    #                                 nalu_priority=,
+    #                                 nalu_timestamp_ns=,
+    #                                 nalu_payload_size=)
 finally:
     if source:
         source.close()

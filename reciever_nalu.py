@@ -1,18 +1,9 @@
 import socket 
 import subprocess
 import cv2
-from simple_rtp_header import SimpleRtp
+from video_header import VideoHeader
 from nalu_parser import nalu_type_name, nalu_type
-from config import UDP_SAFE_PAYLOAD
-# =========
-# Variables de red
-# ================
-
-SERVER_IP = '127.0.0.1'
-SERVER_PORT = 65432
-PACKET_SIZE = 8
-
-
+from config import UDP_SAFE_PAYLOAD, SERVER_IP, SERVER_PORT, REAL_HEADER_SIZE
 
 # =============
 # Configuración del receptor ffmepg
@@ -41,27 +32,28 @@ nalu_temp = []
 end = False
 
 def extract_nalu_from_incoming_byte(header_recieved, nalu_temp, final_nalu, incoming_video):
-    if (header_recieved.flags == 0):
+    is_fragmented = header_recieved.fragment_count > 1
+    if is_fragmented:
+        is_first_fragment = header_recieved.fragment_index == 0
+        is_last_fragment = header_recieved.fragment_index == header_recieved.fragment_count -1
+
+        if is_first_fragment:
+            nalu_temp = [incoming_video]
+        elif is_last_fragment:
+            nalu_temp.append(incoming_video)
+            final_nalu = b"".join(nalu_temp)
+            nalu_temp = []
+        else: # Resto de paquetes intermedios normales
+            nalu_temp.append(incoming_video)
+    else:
         final_nalu = incoming_video
-
-    if header_recieved.flags == 1:
-        nalu_temp = [incoming_video]
-
-    if header_recieved.flags == 2:
-        nalu_temp.append(incoming_video)
-
-    if header_recieved.flags == 3:
-        nalu_temp.append(incoming_video)
-        for nalu in nalu_temp:
-            final_nalu += nalu
-        nalu_temp = []
     return final_nalu, nalu_temp
     
 def obtain_header_video(incoming_bytes):
-    incoming_header = incoming_bytes[:PACKET_SIZE]
-    incoming_video = incoming_bytes[PACKET_SIZE:]
+    incoming_header = incoming_bytes[:REAL_HEADER_SIZE]
+    incoming_video = incoming_bytes[REAL_HEADER_SIZE:]
 
-    header_recieved = SimpleRtp.from_byte(incoming_header)
+    header_recieved = VideoHeader.from_byte(incoming_header)
     return header_recieved, incoming_video
 
 while True:
@@ -89,9 +81,7 @@ while True:
                 ffplay_process.stdin.write(b'\x00\x00\x00\x01' + final_nalu)
                 ffplay_process.stdin.flush()
 
-
-    
-    if (header_recieved is not None and header_recieved.flags == 4) or end == True:
+    if end == True:
         print("Último paquete alcanzado, fin")
             # Matar proceso stdin
         if ffplay_process.stdin is not None:
