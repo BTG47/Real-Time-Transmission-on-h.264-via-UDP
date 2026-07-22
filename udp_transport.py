@@ -12,7 +12,6 @@ class UdpTransport(Transport):
 
     def send_packet(self, packet: NALUPacket):
 
-
         # Romper el paquete en unidades
         nalu_packet_sequence = packet.packet_sequence
         nalu_id = packet.nalu_id 
