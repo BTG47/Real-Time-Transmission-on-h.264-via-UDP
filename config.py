@@ -1,6 +1,8 @@
 from video_header import VideoHeader
 from priority_classifier import Priority
 import struct
+# Configuración de ejecuión
+DEBUG = False
 
 # Configuración de ffmpeg_video_source.py
 LECTURE_SIZE = 4096

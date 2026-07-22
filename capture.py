@@ -5,7 +5,8 @@ from ffmpeg_video_source import FfmpegVideoSource
 from udp_transport import UdpTransport
 from priority_classifier import obtain_classification_nalu
 from packetScheduler import PacketScheduler
-
+from sender_metrics import SenderMetrics
+from config import DEBUG
 # =======================
 # Información del paquete
 # =======================
@@ -20,15 +21,16 @@ transport = UdpTransport()
 logicPacket = Paketizer()
 schedule = PacketScheduler()
 source = None
-
+sender = None
 print("Listening to /dev/video0... Parsing incoming NAL Units:\n")
 try:
     source = FfmpegVideoSource()
+    sender = SenderMetrics()
     
     while True:
         chunk = source.read_chunk()
         nalus = source.obtain_nalus_from_chunk(chunk)
-        
+    
         if nalus is not None:
             for idx, nalu in enumerate (nalus):
                 numeric_type_nalu = nalu_type(nalu)
@@ -36,8 +38,9 @@ try:
                 priority = obtain_classification_nalu(numeric_type_nalu)
                 nalu_size = len(nalu)
 
-                print_nalu(idx, numeric_type_nalu, nalu_name, nalu_size)
-
+                if DEBUG:
+                    print_nalu(idx, numeric_type_nalu, nalu_name, nalu_size)
+    
                 # Packetizar los nalu en nalus del mismo tamaño
                 nalus_segmented = logicPacket.packetize(nalu, numeric_type_nalu, priority)
 
@@ -48,10 +51,15 @@ try:
                         break
 
                     for packet in packets:
-                        transport.send_packet(packet)
+                        bytes_send_size = transport.send_packet(packet)
+                        if bytes_send_size:
+                            sender.record(packet,sent_data_size=bytes_send_size)
 
+    
 except KeyboardInterrupt:
     print("Acabando el proceso...")
+    if sender is not None:
+        sender.summary()
     # Debido a que ya no hay flags, de momento no se puede reconstrir el video
     #if source:
     #    transport.send_single_header(nalu_packet_sequence= 0,

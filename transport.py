@@ -4,7 +4,7 @@ from packetizer import NALUPacket
 class Transport(ABC):
 
     @abstractmethod
-    def send_packet(self, packet:NALUPacket) -> None:
+    def send_packet(self, packet:NALUPacket) -> int:
         pass
 
     @abstractmethod

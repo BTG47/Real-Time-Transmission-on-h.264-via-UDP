@@ -3,7 +3,7 @@ import subprocess
 import cv2
 from video_header import VideoHeader
 from nalu_parser import nalu_type_name, nalu_type
-from config import UDP_SAFE_PAYLOAD, SERVER_IP, SERVER_PORT, REAL_HEADER_SIZE
+from config import UDP_SAFE_PAYLOAD, SERVER_IP, SERVER_PORT, REAL_HEADER_SIZE, DEBUG
 
 # =============
 # Configuración del receptor ffmepg
@@ -70,7 +70,9 @@ while True:
         header_recieved = None
     else:
         header_recieved, incoming_video = obtain_header_video(incoming_bytes)
-        print(header_recieved)
+        
+        if DEBUG:
+            print(header_recieved)
 
         final_nalu = b''
         final_nalu, nalu_temp = extract_nalu_from_incoming_byte(header_recieved, nalu_temp, final_nalu, incoming_video)

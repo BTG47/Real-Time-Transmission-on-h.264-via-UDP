@@ -1,6 +1,6 @@
 from transport import Transport
 import socket
-from config import SERVER_IP, SERVER_PORT
+from config import SERVER_IP, SERVER_PORT, DEBUG
 from packetizer import NALUPacket
 from video_header import VideoHeader
 from priority_classifier import Priority
@@ -10,7 +10,7 @@ class UdpTransport(Transport):
     def __init__(self):
         self.sender_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
-    def send_packet(self, packet: NALUPacket):
+    def send_packet(self, packet: NALUPacket) -> int:
 
         # Romper el paquete en unidades
         nalu_packet_sequence = packet.packet_sequence
@@ -28,7 +28,8 @@ class UdpTransport(Transport):
         header = VideoHeader(nalu_packet_sequence, nalu_id, nalu_fragment_index,
                              nalu_fragment_count, nalu_type, nalu_priority, nalu_timestamp_ns,
                              nalu_pauload_size)
-        print(header)
+        if DEBUG:
+            print(header)
         header_to_send = header.to_bytes()
         data_to_send = header_to_send + nalu_payload
         if len(data_to_send) > 1200:
@@ -38,6 +39,8 @@ class UdpTransport(Transport):
             )
         # Enviar datos
         self.sender_socket.sendto(data_to_send, (SERVER_IP, SERVER_PORT))
+        data_size = len(data_to_send)
+        return data_size
 
     def send_single_header(self, nalu_packet_sequence, nalu_id, nalu_fragment_index, 
                            nalu_fragment_count,nalu_type, nalu_priority, nalu_timestamp_ns,
