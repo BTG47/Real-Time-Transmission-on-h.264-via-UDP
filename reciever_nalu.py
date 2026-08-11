@@ -1,8 +1,8 @@
 import socket 
 import subprocess
-from video_header import VideoHeader
-from reciever_metrics import RecieverMetrics
-from nalu_parser import nalu_type_name, nalu_type
+from transport.video_header import VideoHeader
+from metrics.reciever_metrics import RecieverMetrics
+from packets.nalu_parser import nalu_type_name, nalu_type
 from config import UDP_SAFE_PAYLOAD, SERVER_IP, SERVER_PORT, REAL_HEADER_SIZE, DEBUG
 
 # =============

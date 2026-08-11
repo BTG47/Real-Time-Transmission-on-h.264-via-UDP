@@ -1,5 +1,5 @@
-from video_header import VideoHeader
-from priority_classifier import Priority
+from transport.video_header import VideoHeader
+from packets.priority_classifier import Priority
 import struct
 # Configuración de ejecuión
 DEBUG = False

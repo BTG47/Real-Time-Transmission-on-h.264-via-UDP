@@ -1,9 +1,9 @@
-from transport import Transport
+from transport.transport import Transport
 import socket
 from config import SERVER_IP, SERVER_PORT, DEBUG
-from packetizer import NALUPacket
-from video_header import VideoHeader
-from priority_classifier import Priority
+from packets.packetizer import NALUPacket
+from transport.video_header import VideoHeader
+from packets.priority_classifier import Priority
 
 class UdpTransport(Transport):
 

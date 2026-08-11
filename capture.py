@@ -1,11 +1,11 @@
 import subprocess
-from nalu_parser import extract_nalus_chunk, nalu_type, nalu_type_name
-from packetizer import Paketizer
+from packets.nalu_parser import extract_nalus_chunk, nalu_type, nalu_type_name
+from packets.packetizer import Paketizer
 from ffmpeg_video_source import FfmpegVideoSource
-from udp_transport import UdpTransport
-from priority_classifier import obtain_classification_nalu
-from packetScheduler import PacketScheduler
-from sender_metrics import SenderMetrics
+from transport.udp_transport import UdpTransport
+from packets.priority_classifier import obtain_classification_nalu
+from packets.packetScheduler import PacketScheduler
+from metrics.sender_metrics import SenderMetrics
 from config import DEBUG
 # =======================
 # Información del paquete

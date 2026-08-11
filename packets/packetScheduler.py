@@ -4,7 +4,7 @@
 from collections import deque
 from packets.packetizer import NALUPacket
 from config import CRITICAL_VALUES, HIGH_VALUES, NORMAL_VALUES, LOW_VALUES
-from priority_classifier import Priority
+from packets.priority_classifier import Priority
 class PacketScheduler():
     def __init__(self):
         self.criticalQueue : deque[list[NALUPacket]] = deque() 

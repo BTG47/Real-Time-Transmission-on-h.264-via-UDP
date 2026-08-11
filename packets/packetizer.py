@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from config import SIZE_MAX_PACKET
-from priority_classifier import Priority
+from packets.priority_classifier import Priority
 import time
 
 @dataclass

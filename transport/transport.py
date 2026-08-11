@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from packetizer import NALUPacket
+from packets.packetizer import NALUPacket
 
 class Transport(ABC):
 

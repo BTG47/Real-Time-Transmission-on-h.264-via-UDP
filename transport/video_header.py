@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from priority_classifier import Priority
+from packets.priority_classifier import Priority
 import struct
 @dataclass
 class VideoHeader():

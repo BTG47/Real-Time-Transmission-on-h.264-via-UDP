@@ -1,11 +1,11 @@
 import time
-from nalu_parser import nalu_type
-from packetizer import Paketizer
-from udp_transport import UdpTransport
-from priority_classifier import obtain_classification_nalu
-from packetScheduler import PacketScheduler
-from priority_classifier import Priority
-from packetizer import NALUPacket
+from packets.nalu_parser import nalu_type
+from packets.packetizer import Paketizer
+from transport.udp_transport import UdpTransport
+from packets.priority_classifier import obtain_classification_nalu
+from packets.packetScheduler import PacketScheduler
+from packets.priority_classifier import Priority
+from packets.packetizer import NALUPacket
 
 transport = UdpTransport()
 logicPacket = Paketizer()
