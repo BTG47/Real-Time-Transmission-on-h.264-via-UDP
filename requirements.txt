@@ -1,0 +1,7 @@
+# Dependencias Python mínimas para el prototipo UDP/H.264
+#
+# El flujo principal actual usa únicamente la biblioteca estándar de Python.
+# FFmpeg y ffplay NO se instalan con pip; deben instalarse a nivel del sistema.
+#
+# Si algún módulo futuro vuelve a usar OpenCV, descomenta la siguiente línea:
+# opencv-python==4.13.0.92
