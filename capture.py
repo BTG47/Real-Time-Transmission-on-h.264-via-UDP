@@ -72,6 +72,6 @@ except KeyboardInterrupt:
     #                                 nalu_payload_size=)
 finally:
     if source:
-        source.close
+        source.close()
 
     transport.close()

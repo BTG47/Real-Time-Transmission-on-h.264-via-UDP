@@ -88,7 +88,7 @@ class RecieverMetrics():
                 
     def calculate_differences(self):
         if self.temp_total_nalu_count != 0:
-            difference = self.temp_total_nalu_count - self.temp_total_nalu_count
+            difference = self.temp_total_nalu_count - self.temp_nalu_count
             if difference == 0: # Se recupero por completo
                 self.nalu_rebuilded += 1
             else:
