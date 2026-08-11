@@ -1,7 +1,7 @@
 import socket 
 import subprocess
-import cv2
 from video_header import VideoHeader
+from reciever_metrics import RecieverMetrics
 from nalu_parser import nalu_type_name, nalu_type
 from config import UDP_SAFE_PAYLOAD, SERVER_IP, SERVER_PORT, REAL_HEADER_SIZE, DEBUG
 
@@ -54,8 +54,9 @@ def obtain_header_video(incoming_bytes):
     incoming_video = incoming_bytes[REAL_HEADER_SIZE:]
 
     header_recieved = VideoHeader.from_byte(incoming_header)
-    return header_recieved, incoming_video
+    return header_recieved, incoming_video, incoming_header
 
+reciever_metrics = RecieverMetrics()
 while True:
     try:
         incoming_bytes, client_addr = client_socket.recvfrom(UDP_SAFE_PAYLOAD)
@@ -69,7 +70,9 @@ while True:
         incoming_video = None
         header_recieved = None
     else:
-        header_recieved, incoming_video = obtain_header_video(incoming_bytes)
+        header_recieved, incoming_video, incoming_header = obtain_header_video(incoming_bytes)
+
+        reciever_metrics.record(header_recieved, size_header_recieved= len(incoming_header), size_video_recieved= len(incoming_video))
         
         if DEBUG:
             print(header_recieved)
@@ -85,6 +88,7 @@ while True:
 
     if end == True:
         print("Último paquete alcanzado, fin")
+        reciever_metrics.summary()
             # Matar proceso stdin
         if ffplay_process.stdin is not None:
             ffplay_process.stdin.close()

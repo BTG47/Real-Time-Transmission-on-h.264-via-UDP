@@ -2,7 +2,7 @@
 # envíen dependiendo de que tan relevantes sean
 
 from collections import deque
-from packetizer import NALUPacket
+from packets.packetizer import NALUPacket
 from config import CRITICAL_VALUES, HIGH_VALUES, NORMAL_VALUES, LOW_VALUES
 from priority_classifier import Priority
 class PacketScheduler():

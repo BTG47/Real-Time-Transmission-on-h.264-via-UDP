@@ -1,7 +1,7 @@
 import time
 from priority_classifier import Priority
 from config import REAL_HEADER_SIZE
-from nalu_parser import nalu_type_name
+from packets.nalu_parser import nalu_type_name
 # El objetivo de este código es obtener métricas para comparar el desarrollo del protocolo
 
 class SenderMetrics:

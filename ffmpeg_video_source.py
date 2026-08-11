@@ -2,7 +2,7 @@
 # Y con este flujo pasarlo a chunks comprobados
 import subprocess
 from config import LECTURE_SIZE
-from nalu_parser import extract_nalus_chunk
+from packets.nalu_parser import extract_nalus_chunk
 
 cmd = [
     'ffmpeg', '-hide_banner',
