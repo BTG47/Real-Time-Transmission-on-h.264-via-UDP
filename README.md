@@ -1,276 +1,274 @@
-# H.264 NALU Streaming over UDP
+# H.264 Real-Time Streaming Prototype over UDP
 
-Este proyecto es una prueba experimental para transmitir video H.264 en tiempo real usando UDP.
+Prototipo experimental para transmitir video H.264 en tiempo real usando UDP.
 
-La idea principal es tomar video desde una cámara, codificarlo como H.264, separar el flujo en NALUs, dividir las NALUs grandes en paquetes pequeños, enviarlas por UDP y reconstruirlas del lado del receptor para visualizarlas con `ffplay`.
+El objetivo actual no es implementar el protocolo final, sino disponer de una base modular y medible para experimentar con:
 
-No es todavía el protocolo final del proyecto. Esta versión funciona como una base práctica para entender y validar el envío de video comprimido por UDP.
+- captura y codificación H.264;
+- parsing de NALUs;
+- fragmentación;
+- prioridades;
+- scheduling;
+- transporte UDP;
+- reconstrucción en el receptor;
+- métricas de emisor y receptor;
+- futura migración y comparación con C++.
+
+> La documentación técnica extensa, contratos internos, diagramas y guía de migración a C++ se encuentran en:
+>
+> **`HANDOFF_CPP_UDP_H264_v2.md`**
 
 ---
 
-## Flujo general
+## 1. Flujo general
 
 ```text
 Cámara
   ↓
 FFmpeg
   ↓
-H.264 raw stream
+H.264 Annex B
   ↓
-Chunks de bytes
+NALU Parser
   ↓
-Parser de NALUs
+Priority Classifier
   ↓
 Packetizer
   ↓
-UDP sender
+Packet Scheduler
   ↓
-UDP receiver
+UDP Transport
   ↓
-Reconstructor de NALUs
+──────────────────────────── Red / localhost
+  ↓
+UDP Receiver
+  ↓
+VideoHeader + Payload
+  ↓
+Reensamblado por nalu_id / fragment_index
+  ↓
+NALU completa
   ↓
 ffplay
-  ↓
-Video en vivo
 ```
 
 ---
 
-## Instalación de paquetes
+## 2. Estructura del proyecto
 
-### Fedora / Linux
-
-Instalar FFmpeg y herramientas básicas:
-
-```bash
-sudo dnf install ffmpeg ffmpeg-devel v4l-utils python3 python3-pip
+```text
+07_REAL_TIME_H264/
+├── metrics/
+│   ├── reciever_metrics.py
+│   └── sender_metrics.py
+│
+├── packets/
+│   ├── nalu_parser.py
+│   ├── packetizer.py
+│   ├── packetScheduler.py
+│   └── priority_classifier.py
+│
+├── test/
+│   └── test_scheduler.py
+│
+├── transport/
+│   ├── sender_nalu.py
+│   ├── transport.py
+│   ├── udp_transport.py
+│   └── video_header.py
+│
+├── capture.py
+├── config.py
+├── ffmpeg_video_source.py
+├── reciever_nalu.py
+├── requirements.txt
+├── README.md
+└── HANDOFF_CPP_UDP_H264_v2.md
 ```
 
-Si `ffplay` no queda disponible con el paquete anterior, revisar que FFmpeg esté instalado correctamente:
+`sender_nalu.py` contiene código histórico de iteraciones anteriores y no forma parte del flujo principal actual.
+
+---
+
+## 3. Requisitos
+
+### Sistema operativo
+
+El prototipo actual está pensado principalmente para Linux.
+
+La captura utiliza:
+
+```text
+v4l2
+/dev/video0
+```
+
+Comprueba que la cámara exista con:
+
+```bash
+ls /dev/video*
+```
+
+o:
+
+```bash
+v4l2-ctl --list-devices
+```
+
+### Python
+
+Se recomienda Python 3.11.
+
+El flujo principal actual usa únicamente módulos de la biblioteca estándar de Python, por lo que `requirements.txt` no instala paquetes externos por defecto.
+
+Instalación:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+El archivo `requirements.txt` se mantiene intencionalmente mínimo.
+
+### FFmpeg
+
+Se necesita:
+
+- `ffmpeg`
+- `ffplay`
+- herramientas de V4L2
+
+En Fedora:
+
+```bash
+sudo dnf install ffmpeg ffmpeg-devel v4l-utils
+```
+
+Comprobar instalación:
 
 ```bash
 ffmpeg -version
 ffplay -version
 ```
 
-Para revisar qué cámaras detecta Linux:
-
-```bash
-ls /dev/video*
-v4l2-ctl --list-devices
-```
-
-Este proyecto asume por defecto que la cámara está en:
-
-```text
-/dev/video0
-```
-
-Si tu cámara aparece en otro dispositivo, cambia esa ruta en `capture.py`.
-
-### Entorno virtual opcional
-
-Crear entorno virtual:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-```
-
-Instalar dependencias de Python:
-
-```bash
-pip install opencv-python
-```
-
-Nota: `opencv-python` solo es necesario si se mantiene alguna parte del código que use `cv2`. Si el video se visualiza únicamente con `ffplay`, puede no ser indispensable.
+FFmpeg no se instala mediante `requirements.txt`; es una dependencia del sistema.
 
 ---
 
-## Archivos principales
+## 4. Configuración
 
-### `capture.py`
-
-Es el punto de entrada del emisor.
-
-Este archivo abre la cámara usando FFmpeg, codifica el video en H.264 y lee el stream generado desde `stdout`.
-
-Después toma los bytes recibidos por chunks, extrae NALUs completas, las packetiza y las manda por UDP.
-
-En pocas palabras:
+La configuración principal está en:
 
 ```text
-cámara → H.264 → NALUs → paquetes UDP
+config.py
 ```
 
-![Flujo de capture.py](images/Capture_flow.png)
+Valores importantes:
 
----
-
-### `nalu_parser.py`
-
-Se encarga de trabajar con el formato H.264 Annex B.
-
-Busca los start codes:
-
-```text
-00 00 01
-00 00 00 01
-```
-
-y usa esos separadores para encontrar las NALUs dentro del stream.
-
-También permite obtener el tipo de NALU:
-
-```text
-1 = non-IDR slice
-5 = IDR slice
-6 = SEI
-7 = SPS
-8 = PPS
-```
-
----
-
-### `packetizer.py`
-
-Se encarga de dividir una NALU grande en fragmentos más pequeños para poder mandarlos por UDP sin pasarnos del tamaño recomendado.
-
-Cada fragmento se guarda como un `NALUPacket`, que contiene:
-
-```text
-payload
-sequence
-nal_type
-flag
-size
-```
-
-Las flags usadas son:
-
-```text
-0 = NALU completa en un solo paquete
-1 = inicio de NALU fragmentada
-2 = fragmento intermedio
-3 = final de NALU fragmentada
-4 = fin de transmisión
-```
-
----
-
-### `simple_rtp_header.py`
-
-Define un header binario custom de 8 bytes.
-
-Aunque el archivo se llama `SimpleRtp`, este proyecto no implementa RTP real. El nombre quedó como referencia histórica de las pruebas anteriores.
-
-El header contiene:
-
-```text
-sequence      4 bytes
-nal_type      1 byte
-flags         1 byte
-payload_size  2 bytes
-```
-
-Formato total:
-
-```text
-[ header custom ][ payload ]
-```
-
----
-
-### `sender_nalu.py`
-
-Contiene funciones auxiliares para crear el socket UDP y enviar paquetes.
-
-La función más importante manda:
-
-```text
-header + payload
-```
-
-por UDP hacia el receptor.
-
----
-
-### `reciever_nalu.py`
-
-Es el receptor.
-
-Recibe paquetes UDP, separa el header del payload, reconstruye NALUs fragmentadas y manda cada NALU completa a `ffplay` por `stdin`.
-
-También puede guardar un archivo `reconstructed2` para debug.
-
-En pocas palabras:
-
-```text
-paquetes UDP → NALUs reconstruidas → ffplay
-```
-
-![Flujo de reciever.py](images/Reciever_flow.png)
-
----
-
-### `config.py`
-
-Centraliza valores de configuración relacionados con el tamaño de paquetes.
-
-Actualmente se usa:
-
-```text
+```python
+DEBUG = False
+LECTURE_SIZE = 4096
+SERVER_IP = "127.0.0.1"
+SERVER_PORT = 65432
 UDP_SAFE_PAYLOAD = 1200
 ```
 
-y se resta el tamaño real del header para obtener el tamaño máximo del fragmento de NALU.
-
-Esto se hace para evitar acercarnos demasiado al límite de MTU y reducir el riesgo de fragmentación IP.
+El tamaño máximo del payload se calcula automáticamente restando el tamaño real de `VideoHeader`.
 
 ---
 
-## Cómo correrlo
+## 5. Ejecutar en una sola computadora
 
-Primero inicia el receptor:
+Primero inicia el receptor.
+
+### Terminal 1 — receptor
+
+Desde la raíz del proyecto:
 
 ```bash
 python reciever_nalu.py
 ```
 
-Después, en otra terminal, inicia el emisor:
+Deberías ver algo similar a:
+
+```text
+Escuchando 127.0.0.1:65432
+```
+
+### Terminal 2 — emisor
+
+Desde la raíz del proyecto:
 
 ```bash
 python capture.py
 ```
 
-Si todo está bien, debería abrirse una ventana de `ffplay` mostrando el video en tiempo real.
+El emisor abre la cámara, codifica H.264, extrae NALUs, asigna prioridad, fragmenta, agenda paquetes, envía por UDP y registra métricas.
 
-Para detener la transmisión, usa:
+Para detener:
 
-```bash
+```text
 Ctrl + C
 ```
 
-en el emisor.
+El emisor imprime un resumen de métricas al terminar.
+
+El receptor termina después de alcanzar su timeout de recepción y también imprime sus métricas.
 
 ---
 
-## Requisitos
+## 6. Ejecutar entre dos computadoras
 
-Este experimento usa:
+En el equipo receptor:
 
-- Python 3
-- FFmpeg
-- ffplay
-- Cámara disponible en Linux como `/dev/video0`
+1. identifica su IP local;
+2. asegúrate de que el puerto UDP configurado esté permitido por el firewall;
+3. ejecuta `reciever_nalu.py`.
 
-También se asume que el sistema puede usar `v4l2` para capturar video desde la cámara.
+En ambos equipos, cambia en `config.py`:
+
+```python
+SERVER_IP = "<IP_DEL_RECEPTOR>"
+```
+
+Por ejemplo:
+
+```python
+SERVER_IP = "192.168.1.50"
+```
+
+El puerto debe coincidir:
+
+```python
+SERVER_PORT = 65432
+```
+
+Después:
+
+### Receptor
+
+```bash
+python reciever_nalu.py
+```
+
+### Emisor
+
+```bash
+python capture.py
+```
 
 ---
 
-## Comando base de FFmpeg
+## 7. Cámara
 
-El emisor usa FFmpeg con una configuración parecida a esta:
+La fuente de video se define en:
+
+```text
+ffmpeg_video_source.py
+```
+
+Actualmente FFmpeg utiliza:
 
 ```bash
 ffmpeg -hide_banner \
@@ -283,107 +281,219 @@ ffmpeg -hide_banner \
   pipe:1
 ```
 
-Esto significa:
+Si la cámara está en otra ruta, cambia `/dev/video0` por el dispositivo correcto.
+
+---
+
+## 8. Modo debug
+
+En `config.py`:
+
+```python
+DEBUG = False
+```
+
+Cámbialo a:
+
+```python
+DEBUG = True
+```
+
+para mostrar información adicional de NALUs y headers.
+
+Para pruebas de rendimiento conviene mantener `DEBUG = False`, porque imprimir por paquete puede alterar las métricas.
+
+---
+
+## 9. Header actual
+
+El protocolo experimental utiliza un header binario custom de **24 bytes**:
 
 ```text
--f v4l2              usar cámara en Linux
--i /dev/video0       cámara de entrada
--c:v libx264         codificar en H.264
--preset ultrafast    priorizar velocidad
--tune zerolatency    reducir latencia
--f h264              salida H.264 cruda
-pipe:1               mandar salida a stdout
+packet_sequence   4 bytes
+nalu_id           4 bytes
+fragment_index    2 bytes
+fragment_count    2 bytes
+nal_type          1 byte
+priority          1 byte
+timestamp_ns      8 bytes
+payload_size      2 bytes
+```
+
+Formato:
+
+```text
+[ VideoHeader 24 B ][ payload H.264 ]
+```
+
+El datagrama completo no debe superar 1200 bytes, por lo que el payload máximo actual es de 1176 bytes.
+
+El contrato binario exacto y las consideraciones de interoperabilidad con C++ están documentadas en:
+
+```text
+HANDOFF_CPP_UDP_H264_v2.md
 ```
 
 ---
 
-## Visualización en vivo
+## 10. Prioridades
 
-El receptor abre `ffplay` y le escribe las NALUs reconstruidas directamente por `stdin`.
+Clasificación actual:
 
-El comando usado es parecido a:
+```text
+CRITICAL → SPS / PPS
+HIGH     → IDR
+NORMAL   → non-IDR
+LOW      → SEI
+```
+
+Estas prioridades son lógicas y actualmente sirven para organizar paquetes mediante `PacketScheduler`.
+
+---
+
+## 11. Reconstrucción del receptor
+
+El receptor mantiene NALUs pendientes mediante una estructura equivalente a:
+
+```text
+pending_nalus[nalu_id]
+├── fragment_count
+└── fragments[fragment_index] = payload
+```
+
+Cuando están presentes todos los índices esperados, la NALU se reconstruye en orden y se elimina del conjunto pendiente.
+
+Esto permite manejar fragmentos de distintas NALUs intercalados.
+
+---
+
+## 12. Métricas
+
+### Emisor
+
+Se registran, entre otras:
+
+```text
+payload_bitrate
+wire_bitrate
+payload_bytes
+wire_bytes_sent
+packets_sent
+nalus_sent
+fragmented_packets_sent
+packets_by_priority
+packets_by_nal_type
+```
+
+### Receptor
+
+Se registran métricas relacionadas con:
+
+```text
+paquetes recibidos
+bytes recibidos
+bitrate
+paquetes únicos
+duplicados
+fuera de orden
+NALUs
+prioridades
+tipos de NALU
+```
+
+La lógica de pérdidas, expiración y NALUs incompletas sigue en evolución.
+
+---
+
+## 13. Prueba del scheduler
+
+Existe una prueba sencilla en:
+
+```text
+test/test_scheduler.py
+```
+
+Ejecuta desde la raíz:
 
 ```bash
-ffplay -fflags nobuffer -flags low_delay -framedrop -f h264 -
+python test/test_scheduler.py
 ```
 
-La parte importante es:
+Su objetivo es comprobar que el scheduler respete:
 
 ```text
--f h264
+CRITICAL
+HIGH
+NORMAL
+LOW
 ```
 
-para indicar que se recibe H.264 crudo, y:
-
-```text
--
-```
-
-para leer desde `stdin`.
+independientemente del orden de inserción.
 
 ---
 
-## Notas importantes
+## 14. Limitaciones actuales
 
-Este proyecto funciona como prueba de concepto.
+Este prototipo todavía no implementa completamente:
 
-Actualmente no maneja de forma robusta:
-
-- pérdida de paquetes
-- reordenamiento de paquetes
-- retransmisión
-- sincronización avanzada
-- seguridad
-- control de jitter
-- control de bitrate
-- recuperación después de pérdida de SPS/PPS o IDR
-
-Por ahora, el objetivo principal es validar la base:
-
-```text
-NALUs H.264 + UDP + reconstrucción + reproducción en vivo
-```
+- retransmisión;
+- FEC;
+- timeout para NALUs incompletas;
+- limpieza avanzada de `pending_nalus`;
+- garantía del orden final entre NALUs completadas;
+- jitter buffer;
+- sincronización de relojes entre equipos;
+- seguridad;
+- telemetría;
+- control;
+- QUIC;
+- GNU Radio;
+- adaptación dinámica de bitrate.
 
 ---
 
-## Limitaciones actuales
+## 15. Comparación Python ↔ C++
 
-- El protocolo usa UDP directo, así que no hay garantía de entrega.
-- Si se pierde una NALU importante, el video puede mostrar errores.
-- El receptor asume que los fragmentos llegan en orden.
-- El archivo `reconstructed2` es solo para debug.
-- El nombre `SimpleRtp` no representa RTP real.
-- La implementación todavía es experimental y está pensada para pruebas locales.
+Este repositorio funciona como baseline para portar el sistema a C++.
+
+La documentación técnica se encuentra en:
+
+```text
+HANDOFF_CPP_UDP_H264_v2.md
+```
+
+Ahí se especifican arquitectura, contratos entre módulos, estructura del header, equivalencias Python → C++, pruebas de interoperabilidad, casos de reordenamiento, métricas recomendadas y limitaciones actuales.
+
+Comparaciones previstas:
+
+```text
+Python sender → Python receiver
+C++ sender    → Python receiver
+Python sender → C++ receiver
+C++ sender    → C++ receiver
+```
+
+Primero debe validarse compatibilidad funcional y después rendimiento.
 
 ---
 
-## Próximos pasos posibles
+## 16. Estado actual
 
-Algunas mejoras naturales para futuras versiones:
-
-```text
-[ ] Separar modo debug y modo real-time.
-[ ] Agregar sequence global por paquete.
-[ ] Detectar pérdida de fragmentos.
-[ ] Descartar NALUs incompletas.
-[ ] Guardar y reenviar SPS/PPS.
-[ ] Mejorar manejo de IDR/keyframes.
-[ ] Medir latencia aproximada.
-[ ] Integrar el protocolo real del proyecto.
-[ ] Agregar seguridad.
-[ ] Agregar telemetría/control.
-```
-
----
-
-## Estado actual
-
-Esta versión ya logra transmitir video H.264 en tiempo real de forma local usando UDP.
-
-El sistema completo hace:
+El prototipo ya implementa:
 
 ```text
-captura → codificación → parsing → packetización → envío UDP → reconstrucción → visualización
+captura
+→ H.264
+→ parsing de NALUs
+→ clasificación de prioridad
+→ fragmentación
+→ scheduling
+→ UDP
+→ métricas
+→ reensamblado por nalu_id
+→ reproducción con ffplay
 ```
 
-Es una base experimental, pero ya representa el flujo principal que se necesita para construir encima el protocolo real.
+No representa todavía el protocolo definitivo.
+
+Su propósito actual es servir como una implementación experimental clara, medible y portable sobre la cual continuar trabajando.

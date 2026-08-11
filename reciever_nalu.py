@@ -47,6 +47,17 @@ def extract_nalu_from_incoming_byte(header_recieved, pending_nalus, incoming_vid
     nalu_index = header_recieved.fragment_index
     nalu_fragment_count = header_recieved.fragment_count
 
+
+    # Verificaciones de seguridad
+    if nalu_fragment_count <= 0:
+        return None
+
+    if not 0 <= nalu_index < nalu_fragment_count:
+        return None
+
+    if header_recieved.payload_size != len(incoming_video):
+        return None
+
     if nalu_id not in pending_nalus:
         pending_nalus[nalu_id] = {
             "fragment_count": nalu_fragment_count,
