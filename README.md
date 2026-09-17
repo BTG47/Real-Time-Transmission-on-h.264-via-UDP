@@ -260,6 +260,21 @@ python capture.py
 
 ---
 
+## Modo radio (GNU Radio + SDR)
+
+Alterna transporte con `TRANSPORT = "radio"` en `config.py` (por defecto `"udp"`):
+
+pip install -r requirements-radio.txt   # solo pyzmq
+
+- TX: `python capture.py` → `ZMQPduTransport` publica el datagrama de 24 B + payload
+  (≤ 1200 B) como PDU vía `pmt.serialize_str` en `tcp://127.0.0.1:5555`
+  (PUSH bind; el flowgraph `tx_bladerf.grc` conecta con `ZMQ PULL Message Source`).
+- RX: flowgraph `rx_hackrf.grc` (HackRF) publica en `tcp://127.0.0.1:5556`
+  (`ZMQ PUSH Message Sink`, bind); `python radio/reciever_radio.py` conecta (PULL),
+  decodifica el PDU y reensambla con el mismo `Reassembler` del receptor UDP.
+
+---
+
 ## 7. Cámara
 
 La fuente de video se define en:
