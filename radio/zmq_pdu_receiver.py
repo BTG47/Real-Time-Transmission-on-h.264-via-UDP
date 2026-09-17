@@ -1,12 +1,15 @@
 import subprocess
-import zmq
+try:
+    import zmq
+except ImportError:
+    zmq = None
 from typing import Callable, Optional
 from packets.reassembler import Reassembler
 from transport.datagram import parse_datagram
 from radio.pmt_codec import decode_pdu_data
 from radio.config_radio import ZMQ_RX_ENDPOINT, ZMQ_RX_CONNECT, ZMQ_RCVTIMEO_MS
 
-TIMEOUT_EXCEPTION = zmq.Again
+TIMEOUT_EXCEPTION = getattr(zmq, "Again", TimeoutError)
 
 class ZMQPduReceiver:
     def __init__(self, endpoint=None, context=None, socket=None, connect=None, rcvtimeo_ms=None):

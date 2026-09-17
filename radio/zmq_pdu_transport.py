@@ -1,4 +1,7 @@
-import zmq
+try:
+    import zmq
+except ImportError:
+    zmq = None
 from transport.transport import Transport
 from transport.datagram import build_datagram
 from radio.pmt_codec import encode_u8vector_pdu
