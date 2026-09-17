@@ -34,7 +34,7 @@ ZMQ PUSH Message Sink     (tcp://127.0.0.1:5556, timeout=100, mode=bind)
 ## Endpoints
 
 - **`5555`** — TX: lo **conecta el flowgraph** (`ZMQ PULL Message Source`, mode=connect).
-  El peer (receptor Python, `radio/reciever_radio.py`) es quien hace **bind** en 5555.
+  El peer (`capture.py` vía `ZMQPduTransport`, `ZMQ_TX_BIND=True`) es quien hace **bind** en 5555.
 - **`5556`** — RX: lo **bind** el flowgraph (`ZMQ PUSH Message Sink`, mode=bind).
   El peer (receptor Python) **se conecta** a 5556.
 
@@ -51,7 +51,7 @@ ZMQ PUSH Message Sink     (tcp://127.0.0.1:5556, timeout=100, mode=bind)
 
 ## Orden de arranque sugerido
 
-1. `python radio/reciever_radio.py` — receptor Python (hace bind en 5555, se conecta a 5556).
+1. `python radio/reciever_radio.py` — receptor Python (se conecta a 5556).
 2. Iniciar el flowgraph **RX** (`rx_hackrf.grc`) — bind en 5556.
 3. Iniciar el flowgraph **TX** (`tx_bladerf.grc`) — connect a 5555.
 4. `python capture.py` con `TRANSPORT="radio"` (en `config.py`).
