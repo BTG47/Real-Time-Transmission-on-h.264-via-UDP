@@ -37,5 +37,9 @@ class TestPmtCodec(unittest.TestCase):
         with self.assertRaises(PmtDecodeError):
             decode_pdu_data(encode_u8vector_pdu(b"AB") + b"\x00")
 
+    def test_decode_anidamiento_excesivo(self):
+        with self.assertRaises(PmtDecodeError):
+            decode_pdu_data(b"\x07" * 1000)
+
 if __name__ == "__main__":
     unittest.main()

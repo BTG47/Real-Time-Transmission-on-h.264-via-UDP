@@ -8,6 +8,8 @@ UVI_U8 = 0x00
 class PmtDecodeError(ValueError):
     pass
 
+_MAX_DEPTH = 64
+
 def encode_u8vector_pdu(payload: bytes) -> bytes:
     blob = b"\x0a\x00" + struct.pack(">I", len(payload)) + b"\x01\x00" + payload
     return b"\x07\x06" + blob
@@ -18,7 +20,7 @@ def _read_exact(data, pos, n):
         raise PmtDecodeError(f"PMT truncado en pos {pos}, faltan {n} bytes")
     return data[pos:end], end
 
-def _parse(data, pos=0):
+def _parse(data, pos=0, depth=0):
     tag, pos = _read_exact(data, pos, 1)
     t = tag[0]
     if t == PST_NULL:
@@ -40,8 +42,10 @@ def _parse(data, pos=0):
         raw, pos = _read_exact(data, pos, 8)
         return struct.unpack(">d", raw)[0], pos
     if t in (PST_PAIR, PST_DICT):
-        car, pos = _parse(data, pos)
-        cdr, pos = _parse(data, pos)
+        if depth >= _MAX_DEPTH:
+            raise PmtDecodeError(f"anidamiento PMT excede el limite de {_MAX_DEPTH}")
+        car, pos = _parse(data, pos, depth + 1)
+        cdr, pos = _parse(data, pos, depth + 1)
         return (car, cdr), pos
     if t == PST_UNIFORM_VECTOR:
         sub, pos = _read_exact(data, pos, 1)
@@ -56,9 +60,11 @@ def _parse(data, pos=0):
     if t in (PST_TUPLE, PST_VECTOR):
         raw, pos = _read_exact(data, pos, 4)
         (length,) = struct.unpack(">I", raw)
+        if depth >= _MAX_DEPTH:
+            raise PmtDecodeError(f"anidamiento PMT excede el limite de {_MAX_DEPTH}")
         items = []
         for _ in range(length):
-            item, pos = _parse(data, pos)
+            item, pos = _parse(data, pos, depth + 1)
             items.append(item)
         return items, pos
     raise PmtDecodeError(f"tag PMT desconocido 0x{t:02x}")
