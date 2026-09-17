@@ -2,7 +2,7 @@ import subprocess
 from packets.nalu_parser import extract_nalus_chunk, nalu_type, nalu_type_name
 from packets.packetizer import Paketizer
 from ffmpeg_video_source import FfmpegVideoSource
-from transport.udp_transport import UdpTransport
+from transport.transport_factory import get_transport
 from packets.priority_classifier import obtain_classification_nalu
 from packets.packetScheduler import PacketScheduler
 from metrics.sender_metrics import SenderMetrics
@@ -17,7 +17,7 @@ def print_nalu(idx, type_nalu, nalu_name, nalu_size):
     print(f"Nombre de nalu: {nalu_name}")
     print(f"Tam {nalu_size}")
 
-transport = UdpTransport()
+transport = get_transport()
 logicPacket = Paketizer()
 schedule = PacketScheduler()
 source = None

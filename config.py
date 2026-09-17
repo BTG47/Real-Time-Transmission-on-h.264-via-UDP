@@ -10,6 +10,7 @@ LECTURE_SIZE = 4096
 # Configuración para UDP transport
 SERVER_IP = '127.0.0.1'
 SERVER_PORT = 65432
+TRANSPORT = "udp"   # "udp" para el baseline UDP; "radio" para GNU Radio vía ZMQ (requiere requirements-radio.txt)
 
 # SimpleRtp
 header_for_calculate_size = VideoHeader(0,0,0,0,0,Priority.CRITICAL,0,0)
