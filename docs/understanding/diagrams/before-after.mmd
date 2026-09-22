@@ -1,0 +1,48 @@
+%% before-after.mmd — OLD (UDP baseline) vs NEW (GNU Radio/ZMQ) routes
+%% Evidence: VERIFIED from code; SDR/RF link is reference (UNPROVEN).
+
+flowchart LR
+    subgraph INPUT["Camera + capture"]
+        CAM["/dev/video0 (v4l2)"]
+        FF["ffmpeg libx264 ultrafast zerolatency"]
+        PARSE["NALU parser + priority class"]
+        PKT["Packetizer → NALUPacket ≤1176B payload"]
+        SCHED["PacketScheduler (priority queues)"]
+        CAM --> FF --> PARSE --> PKT --> SCHED
+    end
+
+    subgraph OLD["OLD route — UDP baseline (main)"]
+        UDP_TX["UdpTransport (hardcoded)\ntransport/udp_transport.py"]
+        UDP_NET["UDP 127.0.0.1:65432"]
+        UDP_RX["reciever_nalu.py\nsocket → split → inline reassemble"]
+        PLAY1["ffplay"]
+        UDP_TX -->|"datagram 24B+payload ≤1200B"| UDP_NET --> UDP_RX --> PLAY1
+    end
+
+    subgraph NEW["NEW route — GNU Radio via ZMQ PDU (blade_protocol_adaptation)"]
+        FAC["get_transport()\ntransport_factory.py:3-13"]
+        TX["ZMQPduTransport\nPUSH bind tcp://127.0.0.1:5555"]
+        PMT["encode_u8vector_pdu(datagram)\nradio/pmt_codec.py:13-15"]
+        GR_TX["tx_bladerf.grc (ref)\nZMQ PULL → PDU→TaggedStream → GMSK → BladeRF"]
+        RF["RF link 2.45GHz / 20Msps"]
+        GR_RX["rx_hackrf.grc (ref)\nosmosdr → GMSK → TaggedStream→PDU → ZMQ PUSH\nbind tcp://127.0.0.1:5556"]
+        RX["ZMQPduReceiver\nPULL connect 5556 · decode_pdu_data"]
+        PARSE2["parse_datagram → VideoHeader(24B)+payload"]
+        RASS["Reassembler (shared)\npackets/reassembler.py:12-37"]
+        PLAY2["ffplay + reconstructed_rf"]
+        SCHED -->|"NALUPacket"| FAC
+        FAC -->|"\"udp\""| UDP_TX
+        FAC -->|"\"radio\""| TX
+        TX -->|"PMT frame"| PMT
+        PMT --> GR_TX --> RF --> GR_RX --> RX --> PARSE2 --> RASS --> PLAY2
+    end
+
+    %% shared layer
+    SUB["shared extract: transport/datagram.py · packets/reassembler.py"]
+    UDPSHARE["UDP RX also uses shared Reassembler + parse_datagram"]
+    UDP_RX --- UDPSHARE
+    RASS --- SUB
+
+    style RF stroke-dasharray: 4 4
+    style GR_TX stroke-dasharray: 4 4
+    style GR_RX stroke-dasharray: 4 4

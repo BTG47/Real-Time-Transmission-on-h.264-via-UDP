@@ -1,0 +1,110 @@
+%% module-dependencies.mmd — Python module dependency graph (import/call edges)
+%% Scope: this repo. Marker: CURRENT state. Edge = import or call dependency.
+%% The Transport ABC (transport/transport.py) is the seam: UdpTransport (old) and
+%% ZMQPduTransport (radio) implement it; transport_factory.get_transport() selects per config.TRANSPORT.
+%% Yellow = seam; blue = radio path.
+
+flowchart TB
+    subgraph ENTRY["Entry points"]
+        CAP["capture.py<br/>sender main loop"]
+        RXU["reciever_nalu.py<br/>UDP receiver main"]
+        RXR["radio/reciever_radio.py<br/>radio receiver main"]
+        FF["ffmpeg_video_source.py<br/>FfmpegVideoSource"]
+    end
+
+    subgraph PROC["packets/ - NALU processing"]
+        NP["nalu_parser"]
+        PC["priority_classifier<br/>Priority enum"]
+        PK["packetizer<br/>NALUPacket + Paketizer"]
+        SCH["packetScheduler<br/>4 priority queues"]
+        RASS["reassembler<br/>Reassembler.feed"]
+    end
+
+    subgraph TXP["transport/ - media abstraction"]
+        ABC["Transport (ABC)<br/>send_packet / close"]
+        UDT["udp_transport / UdpTransport"]
+        DAT["datagram<br/>build/parse 24B+payload"]
+        VH["video_header / VideoHeader"]
+        FAC["transport_factory<br/>get_transport()"]
+    end
+
+    subgraph RAD["radio/ - GNU Radio path"]
+        ZTX["zmq_pdu_transport / ZMQPduTransport"]
+        ZRX["zmq_pdu_receiver<br/>ZMQPduReceiver + run_recv_loop"]
+        PMT["pmt_codec<br/>PMT/PDU wire"]
+        CFR["config_radio<br/>endpoints 5555/5556"]
+    end
+
+    subgraph MET["metrics/"]
+        SM["sender_metrics"]
+        RM["reciever_metrics"]
+    end
+
+    CFG["config.py<br/>TRANSPORT switch"]
+
+    %% capture -> pipeline
+    CAP --> FF
+    CAP --> NP
+    CAP --> PC
+    CAP --> PK
+    CAP --> SCH
+    CAP --> FAC
+    CAP --> SM
+    FF --> NP
+    FF --> CFG
+
+    %% packet processing
+    PK --> PC
+    PK --> CFG
+    SCH --> PK
+    SCH --> PC
+    RASS --> VH
+
+    %% UDP receiver
+    RXU --> VH
+    RXU --> DAT
+    RXU --> RASS
+    RXU --> RM
+    RXU --> NP
+    RXU --> CFG
+
+    %% transport seam
+    ABC --> PK
+    UDT -->|implements| ABC
+    ZTX -->|implements| ABC
+    FAC --> UDT
+    FAC --> ZTX
+    FAC --> CFG
+    UDT --> DAT
+    DAT --> PK
+    DAT --> CFG
+    DAT --> VH
+    VH --> PC
+    CFG --> VH
+    CFG --> PC
+
+    %% radio path
+    ZTX --> DAT
+    ZTX --> PMT
+    ZTX --> CFR
+    ZTX --> PK
+    ZRX --> DAT
+    ZRX --> PMT
+    ZRX --> CFR
+    ZRX --> RASS
+    RXR --> ZRX
+
+    %% metrics
+    SM --> PC
+    SM --> NP
+    SM --> CFG
+    RM --> PC
+    RM --> NP
+    RM --> VH
+    RM --> CFG
+
+    %% legend styling
+    classDef seam fill:#fff2cc,stroke:#b8860b,stroke-width:2px
+    classDef radio fill:#e8f0fe,stroke:#1a73e8
+    class ABC,UDT,FAC seam
+    class ZTX,ZRX,PMT,CFR radio

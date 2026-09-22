@@ -273,6 +273,44 @@ pip install -r requirements-radio.txt   # solo pyzmq
   (`ZMQ PUSH Message Sink`, bind); `python radio/reciever_radio.py` conecta (PULL),
   decodifica el PDU y reensambla con el mismo `Reassembler` del receptor UDP.
 
+### Punto B: Conectar HackRF a WSL
+Pasa el control de la tarjeta USB desde Windows hacia Linux. Dentro de
+WindowsPowerShell
+
+```text
+usbipd list
+usbipd attach --wsl --busid <BUS-ID>
+```
+
+En la terminal 1:
+Compila y ejecuta el receptor de GNU Radio usando el ejecutable de Python del sistema operativo
+```text
+grcc -o radio/flowgraphs/ radio/flowgraphs/rx_hackrf.grc
+/usr/bin/python3 radio/flowgraphs/rx_hackrf.py
+```
+
+En la terminal 2:
+Activa el entorno virtual con las dependencias de radio e inicia el receptor de video:
+```text
+pip install -r requirements-radio.txt
+python radio/reciever_radio.py
+```
+
+### Punto A: Iniciar Captura de video
+
+Terminal 1:
+Compila y lanza la transmisión en la bladeRF 2.0:
+```text
+grcc -o radio/flowgraphs/ radio/flowgraphs/tx_bladerf.grc
+python radio/flowgraphs/tx_bladerf.py
+```
+
+Terminal 2:
+Arranca la captura de cámara y el streaming de NALUs H.264 sobre ZMQ:
+```text
+python capture.py
+```
+
 ---
 
 ## 7. Cámara
