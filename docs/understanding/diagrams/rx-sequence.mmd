@@ -1,0 +1,36 @@
+
+sequenceDiagram
+    autonumber
+    participant RXG as HackRF RX flowgraph (rx_hackrf.grc)
+    participant ZS as ZMQ PUSH 5556
+    participant ZR as ZMQPduReceiver (PULL connect)
+    participant PM as pmt_codec
+    participant DG as datagram.parse_datagram
+    participant RE as Reassembler
+    participant FF as on_nalu / ffplay
+    participant WF as write file (reconstructed_rf)
+
+    Note over RXG: osmosdr source (hackrf, 20 Msps, 2.45 GHz) → GMSK Demod sps=8 → Tagged Stream to PDU [rx_hackrf.grc:55-139]
+    RXG->>ZS: PDU (serialized PMT PDU), flowgraph binds tcp://127.0.0.1:5556 [rx_hackrf.grc:140-166]
+
+    ZS->>ZR: ZMQ message = frame 37B (PULL connect 5556) [zmq_pdu_receiver.py:21-27]
+    ZR->>ZR: recv() with RCVTIMEO=5000 ms [zmq_pdu_receiver.py:27,31]
+    Note over ZR: idle 5000 ms → recv_timeout() returns None → on_timeout() ends the loop [zmq_pdu_receiver.py:29-34,47-50]
+
+    ZR->>PM: decode_pdu_data(frame 37B) [zmq_pdu_receiver.py:34]
+    PM-->>ZR: datagram 27B (pair walk to final u8vector, otherwise PmtDecodeError) [pmt_codec.py:72-81]
+    ZR-->>ZR: run_recv_loop: datagram = rx.recv_timeout() [zmq_pdu_receiver.py:44-50]
+
+    ZR->>DG: parse_datagram(datagram 27B) [zmq_pdu_receiver.py:51]
+    Note over DG: split at 24B; shorter input raises ValueError; datagram.py lines 15-19
+    DG-->>ZR: VideoHeader(seq=1,id=1,idx=0,cnt=1,type=5,HIGH,ts=0,psize=3), payload=01 02 03
+
+    ZR->>RE: feed(header, payload) [zmq_pdu_receiver.py:52]
+    Note over RE: validate count>0, 0<=idx<count, psize==len, count consistent → else None [reassembler.py:17-29]
+    RE-->>ZR: b"\x01\x02\x03" (cnt=1 completes; multi-frag joins in index order) [reassembler.py:33-36]
+    ZR->>FF: on_nalu(b"\x01\x02\x03") [zmq_pdu_receiver.py:53-54]
+    FF->>FF: stdin.write(00 00 00 01 01 02 03) → ffplay -f h264 [zmq_pdu_receiver.py:64-68]
+
+    ZR->>WF: on_timeout() after 5 s idle [zmq_pdu_receiver.py:70-78]
+    WF->>WF: close stdin, terminate ffplay, write every NALU to "reconstructed_rf"
+    Note over RXG,ZS: RF → GMSK demod fidelity is UNPROVEN — manual checklist only [README_FLOWGRAPHS.md:72-81]

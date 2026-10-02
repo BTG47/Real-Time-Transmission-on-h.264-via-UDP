@@ -1,0 +1,52 @@
+%% tx-sequence.mmd — TX runtime sequence: capture.py → BladeRF
+%% Scope: one representative NALUPacket (seq=1, id=1, count=1, payload 01 02 03) under TRANSPORT="radio".
+%% Marker: CURRENT state. Audience: maintainers of 04_TX_FLOW.md. Date: 2026-09-22.
+%% Evidence: Python stages VERIFIED (test_zmq_pdu_transport, test_datagram, test_zmq_loopback);
+%% flowgraph blocks VERIFIED as XML; RF output UNPROVEN (README_FLOWGRAPHS.md:72-81) — dashed note.
+
+sequenceDiagram
+    autonumber
+    participant Cap as capture.py
+    participant FF as FfmpegVideoSource
+    participant NP as nalu_parser
+    participant PK as packetizer (Paketizer)
+    participant SC as scheduler (PacketScheduler)
+    participant TF as get_transport / ZMQPduTransport
+    participant PM as pmt_codec
+    participant ZP as ZMQ PUSH 5555
+    participant GR as GNU Radio TX (tx_bladerf.grc)
+    participant RF as BladeRF sink
+
+    Note over Cap,TF: startup — transport = get_transport() [capture.py:20], ZMQ PUSH bind 5555 [zmq_pdu_transport.py:18-23]
+
+    Cap->>FF: read_chunk() → bytes (≤ 4096 B) [ffmpeg_video_source.py:26-37]
+    FF-->>Cap: chunk from ffmpeg stdout (Annex-B H.264)
+    Cap->>FF: obtain_nalus_from_chunk(chunk) [ffmpeg_video_source.py:39-48]
+    FF->>NP: extract_nalus_chunk(stream_buffer) [nalu_parser.py:53-79]
+    NP-->>FF: (nalus without start codes, remaining tail)
+    FF-->>Cap: list of NALU bytes (last NALU held back)
+
+    Cap->>NP: nalu_type(nalu) → 5 [nalu_parser.py:82-85]
+    NP-->>Cap: 5 ("IDR slice")
+    Note over Cap: obtain_classification_nalu(5) → Priority.HIGH [capture.py:38, config.py:23]
+
+    Cap->>PK: packetize(nalu, 5, HIGH) [capture.py:45]
+    Note over PK: slice at SIZE_MAX_PACKET=1176, nalu_id+=1, packet_sequence+=1 per fragment [packetizer.py:41-54]
+    PK-->>Cap: [NALUPacket(seq=1, id=1, idx=0, cnt=1, type=5, HIGH, ts, payload=01 02 03)]
+
+    Cap->>SC: enqueue([NALUPacket]) → highQueue [packetScheduler.py:15-30]
+    Cap->>SC: dequeue() → CRITICAL then HIGH then NORMAL then LOW [packetScheduler.py:32-42]
+    SC-->>Cap: [NALUPacket(seq=1, id=1, idx=0, cnt=1, ...)]
+
+    Cap->>TF: send_packet(packet) [capture.py:54]
+    Note over TF: build_datagram → 24B VideoHeader + 3B payload = 27B datagram [datagram.py:5-13]<br/>00000001 00000001 0000 0001 05 01 0000000000000000 0003 010203
+
+    TF->>PM: encode_u8vector_pdu(datagram 27B) [zmq_pdu_transport.py:27]
+    PM-->>TF: frame 37B = 07 06 0a 00 00 00 00 1b 01 00 + datagram [pmt_codec.py:13-15]
+    TF->>ZP: socket.send(frame) [zmq_pdu_transport.py:28]
+    ZP-->>TF: return 27 (datagram length for metrics) [zmq_pdu_transport.py:29]
+
+    ZP->>GR: ZMQ message = 37B serialized PMT PDU (flowgraph PULL connect 5555) [tx_bladerf.grc:55-81]
+    GR->>GR: PDU to Tagged Stream (byte, packet_len) → GMSK Mod sps=8 [tx_bladerf.grc:82-123]
+    GR-->>RF: GMSK IQ samples, 20 Msps, 2.45 GHz [tx_bladerf.grc:124-142]
+    Note over GR,RF: RF over the air is UNPROVEN — manual checklist only [README_FLOWGRAPHS.md:72-81]

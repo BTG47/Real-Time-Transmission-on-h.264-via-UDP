@@ -260,6 +260,63 @@ python capture.py
 
 ---
 
+## Modo radio (GNU Radio + SDR)
+
+> Para el enlace **blade→blade a 2.45 GHz entre dos computadoras**, instala y
+> arranca siguiendo
+> **[`README_RADIO_B2B.md`](README_RADIO_B2B.md)** (guía copia-y-pega por computadora).
+
+Alterna transporte con `TRANSPORT = "radio"` en `config.py` (por defecto `"udp"`):
+
+pip install -r requirements-radio.txt   # solo pyzmq
+
+- TX: `python capture.py` → `ZMQPduTransport` publica el datagrama de 24 B + payload
+  (≤ 1200 B) como PDU vía `pmt.serialize_str` en `tcp://127.0.0.1:5555`
+  (PUSH bind; el flowgraph `tx_bladerf.grc` conecta con `ZMQ PULL Message Source`).
+- RX: flowgraph `rx_hackrf.grc` (HackRF) publica en `tcp://127.0.0.1:5556`
+  (`ZMQ PUSH Message Sink`, bind); `python radio/reciever_radio.py` conecta (PULL),
+  decodifica el PDU y reensambla con el mismo `Reassembler` del receptor UDP.
+
+### Punto B: Conectar HackRF a WSL
+Pasa el control de la tarjeta USB desde Windows hacia Linux. Dentro de
+WindowsPowerShell
+
+```text
+usbipd list
+usbipd attach --wsl --busid <BUS-ID>
+```
+
+En la terminal 1:
+Compila y ejecuta el receptor de GNU Radio usando el ejecutable de Python del sistema operativo
+```text
+grcc -o radio/flowgraphs/ radio/flowgraphs/rx_hackrf.grc
+/usr/bin/python3 radio/flowgraphs/rx_hackrf.py
+```
+
+En la terminal 2:
+Activa el entorno virtual con las dependencias de radio e inicia el receptor de video:
+```text
+pip install -r requirements-radio.txt
+python radio/reciever_radio.py
+```
+
+### Punto A: Iniciar Captura de video
+
+Terminal 1:
+Compila y lanza la transmisión en la bladeRF 2.0:
+```text
+grcc -o radio/flowgraphs/ radio/flowgraphs/tx_bladerf.grc
+python radio/flowgraphs/tx_bladerf.py
+```
+
+Terminal 2:
+Arranca la captura de cámara y el streaming de NALUs H.264 sobre ZMQ:
+```text
+python capture.py
+```
+
+---
+
 ## 7. Cámara
 
 La fuente de video se define en:

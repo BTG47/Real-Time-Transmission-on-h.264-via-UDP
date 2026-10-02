@@ -1,0 +1,38 @@
+%% packet-format.mmd — wire anatomy: datagram (24-B VideoHeader + payload) and its PMT PDU frame
+%% Scope: TRANSPORT="radio". Companion to docs/understanding/06_PACKET_AND_PDU_FORMAT.md. Date: 2026-09-22.
+%% Marker: CURRENT state. Evidence: field layout VERIFIED (video_header.py:15-30, test_datagram.py:13-17);
+%% PMT wrap VERIFIED (pmt_codec.py:13-15, test_pmt_codec.py); ZMQ=one frame per send VERIFIED (zmq_pdu_transport.py:28);
+%% GNU Radio consumption UNPROVEN (README_FLOWGRAPHS.md:72-81) — dashed.
+
+flowchart LR
+    subgraph SRC["VideoHeader — 24 B, struct !IIHHBBQH (network byte order) VERIFIED"]
+        F1["packet_sequence<br/>u32 BE · 4 B<br/>off 0"]
+        F2["nalu_id<br/>u32 BE · 4 B<br/>off 4"]
+        F3["fragment_index<br/>u16 BE · 2 B<br/>off 8"]
+        F4["fragment_count<br/>u16 BE · 2 B<br/>off 10"]
+        F5["nal_type<br/>u8 · 1 B<br/>off 12"]
+        F6["priority<br/>u8 · 1 B<br/>off 13"]
+        F7["timestamp_ns<br/>u64 BE · 8 B<br/>off 14"]
+        F8["payload_size<br/>u16 BE · 2 B<br/>off 22"]
+    end
+
+    PAY["Payload — M bytes<br/>(raw H.264 fragment, no start code)<br/>M ≤ 1176"]
+    DG["DATAGRAM<br/>24 + M ≤ 1200 B"]
+
+    PREF["PMT prefix — 10 B VERIFIED<br/>07 06 = PAIR + PST_NULL (nil car)<br/>0a 00 = u8 uniform vector<br/>&lt;len u32 BE&gt; = len(datagram)<br/>01 00 = npad 1 + pad byte"]
+    FRAME["PDU FRAME<br/>10 + 24 + M B"]
+    ZMQ["ZMQ MESSAGE<br/>one PDU frame per socket.send()"]
+    GR["GNU Radio<br/>PULL connect 5555<br/>pdu_to_tagged_stream → GMSK"]
+    TX["BladeRF sink<br/>(UNPROVEN) RF"]
+
+    F1 --- F2 --- F3 --- F4 --- F5 --- F6 --- F7 --- F8
+    SRC --> DG
+    PAY --> DG
+    DG -- encode_u8vector_pdu pmt_codec.py:13-15 VERIFIED --> PREF
+    PREF --> FRAME
+    DG --> FRAME
+    FRAME -- zmq_pdu_transport.py:28 VERIFIED --> ZMQ
+    ZMQ -- tx_bladerf.grc:55-81 VERIFIED as XML --> GR
+    GR -- tx_bladerf.grc:124-142 UNPROVEN --> TX
+
+    style TX stroke-dasharray: 4 4

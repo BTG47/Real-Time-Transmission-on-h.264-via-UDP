@@ -1,0 +1,38 @@
+%% system-context.mmd — C4 System Context
+%% Scope: the whole repo (sender + both receivers) = one system; everything else is external.
+%% Marker: CURRENT state, branch blade_protocol_adaptation, working tree TRANSPORT="radio".
+%% Evidence: endpoints/roles from code + .grc (VERIFIED); GNU Radio runtime and RF link are
+%% reference artifacts only (UNPROVEN) - dashed borders below.
+
+flowchart LR
+    %% --- Legend ---
+    classDef sysbox fill:#eef,stroke:#334,stroke-width:2px
+    classDef ext fill:#fff,stroke:#667,stroke-width:1px
+    classDef unproven stroke:#999,stroke-dasharray:5 5
+
+    SYS{{"<b>H.264 Streaming Prototype</b><br/>this repo · Python 3.13<br/>capture.py (sender)<br/>reciever_nalu.py + reciever_radio.py (receivers)"}}
+
+    CAM["Camera / v4l2<br/>/dev/video0"]
+    GR_TX["GNU Radio flowgraph TX<br/>tx_bladerf.grc (reference)<br/>ZMQ PULL - PDU > TaggedStream<br/>> GMSK > BladeRF sink"]
+    RF["RF link<br/>2.45 GHz · 20 Msps<br/>GMSK"]
+    GR_RX["GNU Radio flowgraph RX<br/>rx_hackrf.grc (reference)<br/>osmosdr source > GMSK<br/>> TaggedStream > PDU > ZMQ PUSH"]
+    PLAY["ffplay<br/>low-latency H.264 viewer"]
+    UDPNET["UDP path<br/>loopback 127.0.0.1:65432"]
+
+    %% edges (all labelled with data/protocol moved)
+    CAM -->|"raw video frames (v4l2)"| SYS
+
+    SYS -->|"PMT/PDU (car = nil, cons(nil,u8vector)) over ZMQ<br/>PUSH bind 127.0.0.1:5555 -> PULL connect"| GR_TX
+    GR_TX -->|"GMSK-modulated IQ samples"| RF
+    RF -->|"received IQ samples (GMSK)"| GR_RX
+    GR_RX -->|"PMT/PDU over ZMQ<br/>PUSH bind 127.0.0.1:5556 -> PULL connect"| SYS
+
+    SYS -->|"UDP datagram: 24B VideoHeader<br/>+ payload <=1200B"| UDPNET
+    UDPNET -->|"delivers datagram to receiver loop"| SYS
+
+    SYS -->|"Annex-B H.264 NALUs via stdin<br/>(00 00 00 01 start codes)"| PLAY
+
+    %% styling
+    class SYS sysbox
+    class CAM,GR_TX,GR_RX,RF,PLAY,UDPNET ext
+    class GR_TX,GR_RX,RF unproven
