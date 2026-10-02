@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <flow_graph>
-  <timestamp>2026 Sep 17 12:00:00</timestamp>
+  <timestamp>2026 Oct 02 16:10:00</timestamp>
   <block>
     <key>options</key>
     <param>
@@ -17,7 +17,7 @@
     </param>
     <param>
       <key>description</key>
-      <value>Reference RX flowgraph: receives GMSK at 2.45 GHz / 20 Msps with a BladeRF via gr-bladeRF, decodes the tagged stream and forwards the PMT PDU (pmt::serialize_str(cons(dict, u8vector))) over ZMQ PUSH bound to tcp://127.0.0.1:5556.</value>
+      <value>Reference RX flowgraph: receives GMSK at 2.45 GHz / 20 Msps with a BladeRF via gr-bladeRF, correlates the access code, decodes the burst header (16-bit length), re-packs the payload bits and forwards the PMT PDU (pmt::serialize_str(cons(dict, u8vector))) over ZMQ PUSH bound to tcp://127.0.0.1:5556.</value>
     </param>
     <param>
       <key>window_size</key>
@@ -49,26 +49,190 @@
     </param>
     <param>
       <key>comment</key>
-      <value>Reference RX for the blade-to-blade link (TRANSPORT="radio"). Must bind 5556 before python radio/reciever_radio.py connects to it. Pair with tx_bladerf.grc on the transmitter.</value>
+      <value>Reference RX for the blade-to-blade link (TRANSPORT="radio"). Must bind 5556 before python radio/reciever_radio.py connects to it. Pair with tx_bladerf.grc on the transmitter. Access code must match the TX (default_access_code).</value>
     </param>
   </block>
   <block>
-    <key>bladerf_source</key>
+    <key>bladeRF_source</key>
     <param>
       <key>id</key>
-      <value>bladerf_source_0</value>
+      <value>bladeRF_source_0</value>
+    </param>
+    <param>
+      <key>metadata</key>
+      <value>False</value>
+    </param>
+    <param>
+      <key>device_id</key>
+      <value>0</value>
+    </param>
+    <param>
+      <key>fpga_reload</key>
+      <value>False</value>
+    </param>
+    <param>
+      <key>fpga_image</key>
+      <value></value>
+    </param>
+    <param>
+      <key>nchan</key>
+      <value>1</value>
+    </param>
+    <param>
+      <key>verbosity</key>
+      <value>warning</value>
+    </param>
+    <param>
+      <key>feature</key>
+      <value>default</value>
+    </param>
+    <param>
+      <key>sample_format</key>
+      <value>16bit</value>
     </param>
     <param>
       <key>sample_rate</key>
       <value>20e6</value>
     </param>
     <param>
-      <key>center_freq</key>
+      <key>freq</key>
       <value>2.45e9</value>
     </param>
     <param>
-      <key>gain</key>
+      <key>bw</key>
+      <value>20e6</value>
+    </param>
+    <param>
+      <key>use_ref_clk</key>
+      <value>False</value>
+    </param>
+    <param>
+      <key>ref_clk</key>
+      <value>10e6</value>
+    </param>
+    <param>
+      <key>buflen</key>
+      <value>4096</value>
+    </param>
+    <param>
+      <key>buffers</key>
+      <value>512</value>
+    </param>
+    <param>
+      <key>in_clk</key>
+      <value>ONBOARD</value>
+    </param>
+    <param>
+      <key>out_clk</key>
+      <value>False</value>
+    </param>
+    <param>
+      <key>use_dac</key>
+      <value>False</value>
+    </param>
+    <param>
+      <key>dac</key>
+      <value>10000</value>
+    </param>
+    <param>
+      <key>show_pmic</key>
+      <value>False</value>
+    </param>
+    <param>
+      <key>xb200</key>
+      <value>none</value>
+    </param>
+    <param>
+      <key>tamer</key>
+      <value>internal</value>
+    </param>
+    <param>
+      <key>sampling</key>
+      <value>internal</value>
+    </param>
+    <param>
+      <key>lpf_mode</key>
+      <value>disabled</value>
+    </param>
+    <param>
+      <key>smb</key>
+      <value>38.4e6</value>
+    </param>
+    <param>
+      <key>dc_calibration</key>
+      <value>LPF_TUNING</value>
+    </param>
+    <param>
+      <key>bias_tee0</key>
+      <value>False</value>
+    </param>
+    <param>
+      <key>dc_offset_mode0</key>
+      <value>2</value>
+    </param>
+    <param>
+      <key>iq_balance_mode0</key>
+      <value>2</value>
+    </param>
+    <param>
+      <key>gain_mode0</key>
+      <value>False</value>
+    </param>
+    <param>
+      <key>gain0</key>
       <value>40</value>
+    </param>
+    <param>
+      <key>if_gain0</key>
+      <value>20</value>
+    </param>
+    <param>
+      <key>trigger0</key>
+      <value>False</value>
+    </param>
+    <param>
+      <key>trigger_role0</key>
+      <value>master</value>
+    </param>
+    <param>
+      <key>trigger_signal0</key>
+      <value>J51_1</value>
+    </param>
+    <param>
+      <key>bias_tee1</key>
+      <value>False</value>
+    </param>
+    <param>
+      <key>dc_offset_mode1</key>
+      <value>2</value>
+    </param>
+    <param>
+      <key>iq_balance_mode1</key>
+      <value>2</value>
+    </param>
+    <param>
+      <key>gain_mode1</key>
+      <value>False</value>
+    </param>
+    <param>
+      <key>gain1</key>
+      <value>10</value>
+    </param>
+    <param>
+      <key>if_gain1</key>
+      <value>20</value>
+    </param>
+    <param>
+      <key>trigger1</key>
+      <value>False</value>
+    </param>
+    <param>
+      <key>trigger_role1</key>
+      <value>master</value>
+    </param>
+    <param>
+      <key>trigger_signal1</key>
+      <value>J51_1</value>
     </param>
   </block>
   <block>
@@ -80,10 +244,6 @@
     <param>
       <key>samples_per_symbol</key>
       <value>8</value>
-    </param>
-    <param>
-      <key>gain</key>
-      <value>1.0</value>
     </param>
     <param>
       <key>gain_mu</key>
@@ -103,7 +263,7 @@
     </param>
     <param>
       <key>verbose</key>
-      <value>0</value>
+      <value>False</value>
     </param>
     <param>
       <key>log</key>
@@ -111,17 +271,67 @@
     </param>
   </block>
   <block>
-    <key>blocks_tagged_stream_to_pdu</key>
+    <key>digital_correlate_access_code_xx_ts</key>
     <param>
       <key>id</key>
-      <value>blocks_tagged_stream_to_pdu_0</value>
+      <value>digital_correlate_access_code_xx_ts_0</value>
     </param>
     <param>
       <key>type</key>
       <value>byte</value>
     </param>
     <param>
+      <key>access_code</key>
+      <value>digital.packet_utils.default_access_code</value>
+    </param>
+    <param>
+      <key>threshold</key>
+      <value>0</value>
+    </param>
+    <param>
+      <key>tagname</key>
+      <value>packet_len</value>
+    </param>
+  </block>
+  <block>
+    <key>blocks_repack_bits_bb</key>
+    <param>
+      <key>id</key>
+      <value>blocks_repack_bits_bb_0</value>
+    </param>
+    <param>
+      <key>k</key>
+      <value>1</value>
+    </param>
+    <param>
+      <key>l</key>
+      <value>8</value>
+    </param>
+    <param>
       <key>len_tag_key</key>
+      <value>packet_len</value>
+    </param>
+    <param>
+      <key>align_output</key>
+      <value>False</value>
+    </param>
+    <param>
+      <key>endianness</key>
+      <value>gr.GR_MSB_FIRST</value>
+    </param>
+  </block>
+  <block>
+    <key>pdu_tagged_stream_to_pdu</key>
+    <param>
+      <key>id</key>
+      <value>pdu_tagged_stream_to_pdu_0</value>
+    </param>
+    <param>
+      <key>type</key>
+      <value>byte</value>
+    </param>
+    <param>
+      <key>tag</key>
       <value>packet_len</value>
     </param>
   </block>
@@ -140,34 +350,38 @@
       <value>100</value>
     </param>
     <param>
-      <key>mode</key>
-      <value>bind</value>
-    </param>
-    <param>
-      <key>pass_tags</key>
-      <value>False</value>
-    </param>
-    <param>
-      <key>hwm</key>
-      <value>-1</value>
+      <key>bind</key>
+      <value>True</value>
     </param>
   </block>
   <connection>
-    <source_block_id>bladerf_source_0</source_block_id>
+    <source_block_id>bladeRF_source_0</source_block_id>
     <sink_block_id>digital_gmsk_demod_0</sink_block_id>
     <source_key>0</source_key>
     <sink_key>0</sink_key>
   </connection>
   <connection>
     <source_block_id>digital_gmsk_demod_0</source_block_id>
-    <sink_block_id>blocks_tagged_stream_to_pdu_0</sink_block_id>
+    <sink_block_id>digital_correlate_access_code_xx_ts_0</sink_block_id>
     <source_key>0</source_key>
     <sink_key>0</sink_key>
   </connection>
   <connection>
-    <source_block_id>blocks_tagged_stream_to_pdu_0</source_block_id>
+    <source_block_id>digital_correlate_access_code_xx_ts_0</source_block_id>
+    <sink_block_id>blocks_repack_bits_bb_0</sink_block_id>
+    <source_key>0</source_key>
+    <sink_key>0</sink_key>
+  </connection>
+  <connection>
+    <source_block_id>blocks_repack_bits_bb_0</source_block_id>
+    <sink_block_id>pdu_tagged_stream_to_pdu_0</sink_block_id>
+    <source_key>0</source_key>
+    <sink_key>0</sink_key>
+  </connection>
+  <connection>
+    <source_block_id>pdu_tagged_stream_to_pdu_0</source_block_id>
     <sink_block_id>zeromq_push_msg_sink_0</sink_block_id>
-    <source_key>out</source_key>
+    <source_key>pdus</source_key>
     <sink_key>in</sink_key>
   </connection>
 </flow_graph>

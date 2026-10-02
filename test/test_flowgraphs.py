@@ -54,35 +54,87 @@ class TestBladeToBladePairing(unittest.TestCase):
 
     def test_existe_par_bladerf(self):
         self.assertTrue(
-            self._by_type(self.tx, "bladerf_sink"),
-            "tx_bladerf.grc debe usar el bloque gr-bladeRF bladerf_sink",
+            self._by_type(self.tx, "bladeRF_sink"),
+            "tx_bladerf.grc debe usar el bloque gr-bladeRF bladeRF_sink",
         )
         self.assertTrue(
-            self._by_type(self.rx, "bladerf_source"),
-            "rx_bladerf.grc debe usar el bloque gr-bladeRF bladerf_source",
+            self._by_type(self.rx, "bladeRF_source"),
+            "rx_bladerf.grc debe usar el bloque gr-bladeRF bladeRF_source",
         )
 
     def test_misma_frecuencia_y_sample_rate(self):
-        tx_sink = self._by_type(self.tx, "bladerf_sink")[0]["params"]
-        rx_src = self._by_type(self.rx, "bladerf_source")[0]["params"]
+        tx_sink = self._by_type(self.tx, "bladeRF_sink")[0]["params"]
+        rx_src = self._by_type(self.rx, "bladeRF_source")[0]["params"]
         self.assertEqual(tx_sink["sample_rate"], rx_src["sample_rate"])
-        self.assertEqual(tx_sink["center_freq"], rx_src["center_freq"])
-        self.assertEqual(tx_sink["center_freq"], "2.45e9")
+        self.assertEqual(tx_sink["freq"], rx_src["freq"])
+        self.assertEqual(tx_sink["freq"], "2.45e9")
 
     def test_gmsk_emparejado(self):
         mod = self._by_type(self.tx, "digital_gmsk_mod")[0]["params"]
         demod = self._by_type(self.rx, "digital_gmsk_demod")[0]["params"]
         self.assertEqual(mod["samples_per_symbol"], demod["samples_per_symbol"])
-        self.assertEqual(mod["gain"], demod["gain"])
         self.assertEqual(mod["samples_per_symbol"], "8")
+        # gr-bladeRF/GNURadio 3.10: gmsk_mod no tiene gain; do_unpack=False
+        # exige bits 0/1 por byte, True exige bytes empaquetados.
+        self.assertNotIn("gain", mod)
+        self.assertNotIn("gain", demod)
+        self.assertEqual(mod["do_unpack"], "True")
 
     def test_mismo_len_tag_y_tipo(self):
-        tx_pdu = self._by_type(self.tx, "blks2_pdu_to_tagged_stream")[0]["params"]
-        rx_pdu = self._by_type(self.rx, "blocks_tagged_stream_to_pdu")[0]["params"]
-        self.assertEqual(tx_pdu["len_tag_key"], rx_pdu["len_tag_key"])
+        tx_pdu = self._by_type(self.tx, "pdu_pdu_to_tagged_stream")[0]["params"]
+        rx_pdu = self._by_type(self.rx, "pdu_tagged_stream_to_pdu")[0]["params"]
+        self.assertEqual(tx_pdu["tag"], rx_pdu["tag"])
         self.assertEqual(tx_pdu["type"], rx_pdu["type"])
-        self.assertEqual(tx_pdu["len_tag_key"], "packet_len")
+        self.assertEqual(tx_pdu["tag"], "packet_len")
         self.assertEqual(tx_pdu["type"], "byte")
+
+    def test_tx_formatter_y_mux_antes_del_mod(self):
+        # El patrón access-code + header: el payload sale de
+        # pdu_pdu_to_tagged_stream y el header de digital_protocol_formatter_bb,
+        # ambos se fusionan en un blocks_tagged_stream_mux antes de gmsk_mod.
+        fmt = self._by_type(self.tx, "digital_protocol_formatter_bb")
+        self.assertTrue(fmt, "tx_bladerf.grc necesita digital_protocol_formatter_bb")
+        self.assertEqual(fmt[0]["params"]["len_tag_key"], "packet_len")
+        mux = self._by_type(self.tx, "blocks_tagged_stream_mux")
+        self.assertTrue(mux, "tx_bladerf.grc necesita blocks_tagged_stream_mux")
+        self.assertEqual(mux[0]["params"]["lengthtagname"], "packet_len")
+        self.assertEqual(mux[0]["params"]["ninputs"], "2")
+
+    def test_tx_cadena_pdu_formatter_mux(self):
+        # Cadena: pdu_to_tagged_stream -> formatter (header) y -> mux (payload);
+        # formatter -> mux (input 0); mux -> gmsk_mod.
+        conns = _connections_of(f"{FLOWGRAPHS_DIR}/tx_bladerf.grc")
+        p2ts = self._by_type(self.tx, "pdu_pdu_to_tagged_stream")[0]["id"]
+        fmt = self._by_type(self.tx, "digital_protocol_formatter_bb")[0]["id"]
+        mux = self._by_type(self.tx, "blocks_tagged_stream_mux")[0]["id"]
+        mod = self._by_type(self.tx, "digital_gmsk_mod")[0]["id"]
+        self.assertIn((p2ts, "0", fmt, "0"), conns)
+        self.assertIn((p2ts, "0", mux, "1"), conns)
+        self.assertIn((fmt, "0", mux, "0"), conns)
+        self.assertIn((mux, "0", mod, "0"), conns)
+
+    def test_rx_correlator_y_repack_entre_demod_y_pdu(self):
+        # El demod GMSK emite 1 bit por símbolo (un byte 0/1). El correlator
+        # obtiene el access code + header (longitud en bytes), emite el payload
+        # en bits y blocks_repack_bits_bb(1->8) vuelve a empaquetar bytes.
+        corr = self._by_type(self.rx, "digital_correlate_access_code_xx_ts")
+        self.assertTrue(
+            corr, "rx_bladerf.grc necesita digital_correlate_access_code_xx_ts"
+        )
+        self.assertEqual(corr[0]["params"]["tagname"], "packet_len")
+        repack = self._by_type(self.rx, "blocks_repack_bits_bb")
+        self.assertTrue(repack, "rx_bladerf.grc necesita blocks_repack_bits_bb")
+        self.assertEqual(repack[0]["params"]["k"], "1")
+        self.assertEqual(repack[0]["params"]["l"], "8")
+        self.assertEqual(repack[0]["params"]["len_tag_key"], "packet_len")
+        conns = _connections_of(f"{FLOWGRAPHS_DIR}/rx_bladerf.grc")
+        demod_id = self._by_type(self.rx, "digital_gmsk_demod")[0]["id"]
+        corr_id = corr[0]["id"]
+        repack_id = repack[0]["id"]
+        pdu_id = self._by_type(self.rx, "pdu_tagged_stream_to_pdu")[0]["id"]
+        self.assertIn((demod_id, "0", corr_id, "0"), conns)
+        self.assertIn((corr_id, "0", repack_id, "0"), conns)
+        self.assertIn((repack_id, "0", pdu_id, "0"), conns)
 
 
 class TestZmqEndpoints(unittest.TestCase):
@@ -98,23 +150,23 @@ class TestZmqEndpoints(unittest.TestCase):
     def test_tx_pull_connect_5555(self):
         pull = self._first(self.tx, "zeromq_pull_msg_source")
         self.assertEqual(pull["address"], radio_config.ZMQ_TX_ENDPOINT)
-        self.assertEqual(pull["mode"], "connect")
+        self.assertEqual(pull["bind"], "False")
         self.assertEqual(pull["address"], "tcp://127.0.0.1:5555")
 
     def test_rx_push_bind_5556(self):
         push = self._first(self.rx, "zeromq_push_msg_sink")
         self.assertEqual(push["address"], radio_config.ZMQ_RX_ENDPOINT)
-        self.assertEqual(push["mode"], "bind")
+        self.assertEqual(push["bind"], "True")
         self.assertEqual(push["address"], "tcp://127.0.0.1:5556")
 
     def test_roles_bind_connect_par(self):
         # Convención: exactamente un bind por puerto.
         # 5555: Python TX hace bind (ZMQ_TX_BIND=True) -> flowgraph TX conecta.
         self.assertTrue(radio_config.ZMQ_TX_BIND)
-        self.assertEqual(self._first(self.tx, "zeromq_pull_msg_source")["mode"], "connect")
+        self.assertEqual(self._first(self.tx, "zeromq_pull_msg_source")["bind"], "False")
         # 5556: flowgraph RX hace bind -> Python RX conecta (ZMQ_RX_CONNECT=True).
         self.assertTrue(radio_config.ZMQ_RX_CONNECT)
-        self.assertEqual(self._first(self.rx, "zeromq_push_msg_sink")["mode"], "bind")
+        self.assertEqual(self._first(self.rx, "zeromq_push_msg_sink")["bind"], "True")
 
 
 class TestGraphIntegrity(unittest.TestCase):

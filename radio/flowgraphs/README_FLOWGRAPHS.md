@@ -1,13 +1,16 @@
 # Flowgraphs de referencia (GNU Radio Companion)
 
 Artefactos de referencia para validación manual con hardware. No son parte de la
-suite de tests unitarios (solo se verifica que el XML esté bien formado). Requieren
-GNU Radio 3.10+, gr-bladeRF y dos estaciones con BladeRF real.
+suite de tests unitarios (solo se verifica que el XML esté bien formado y que el
+grafo tenga la cadena access-code + header esperada). Requieren GNU Radio 3.10+,
+gr-bladeRF y dos estaciones con BladeRF real.
 
 ## Enlace blade-to-blade (una frecuencia fija)
 
 El objetivo es transmitir el video H.264 por RF **entre dos BladeRF** en una misma
-frecuencia fija (**2.45 GHz**), con modulación GMSK a **20 Msps** (8 muestras/símbolo).
+frecuencia fija (**2.45 GHz**), con modulación GMSK a **20 Msps** (8 muestras/símbolo)
+y un patrón de ráfaga **access code + header** para que el receptor detecte el inicio
+de paquete y la longitud (los paquetes no se alinean por sí solos tras el demod).
 
 ```
 Emisor (estación A)                                Receptor (estación B)
@@ -18,6 +21,8 @@ capture.py (H.264)                                 reciever_radio.py (ffplay)
 tx_bladerf.grc                                          rx_bladerf.grc
 ZMQ PULL ← 5555                                 bladerf_source (RX)
   → PDU to Tagged Stream (packet_len)            → GMSK Demod (8 sps)
+  → formatter → header (access code + 16-bit)    → Correlate Access Code (tag stream)
+  → Tagged Stream Mux (header + payload)         → Repack Bits 1→8 (packet_len)
   → GMSK Mod (8 sps)                             → Tagged Stream to PDU
   → BladeRF sink (TX)                            → ZMQ PUSH → 5556
 ```
@@ -27,27 +32,49 @@ ZMQ PULL ← 5555                                 bladerf_source (RX)
 ### TX — `tx_bladerf.grc` (BladeRF)
 
 ```
-ZMQ PULL Message Source   (tcp://127.0.0.1:5555, timeout=100, mode=connect)
+ZMQ PULL Message Source    (tcp://127.0.0.1:5555, timeout=100, mode=connect)
    │ (msg port: out → in)
    ▼
-PDU to Tagged Stream      (blks2.pdu_to_tagged_stream, Type: byte, Len Tag Key: packet_len)
-   ▼
-GMSK Mod                  (digital.gmsk_mod, samples/symbol=8, gain=1.0)
-   ▼
-BladeRF sink              (gr-bladeRF; sample_rate=20e6, center_freq=2.45e9, gain=40)
+PDU to Tagged Stream       (pdu_to_tagged_stream, Type: byte, Len Tag Key: packet_len)
+   │
+   ├──► Protocol Formatter (digital.protocol_formatter_bb, format=hdr_format)  → header (port 0)
+   │
+   └──► Tagged Stream Mux  (blocks.tagged_stream_mux, Type: byte, Len Tag: packet_len, ninputs=2)
+                              header → input 0 · payload → input 1 · salida = header + payload
+                              ▼
+                           GMSK Mod  (digital.gmsk_mod, samples/symbol=8, bt=0.3, do_unpack=True)
+                              ▼
+                           BladeRF sink (gr-bladeRF; sample_rate=20e6, center_freq=2.45e9, gain=40)
 ```
+
+El bloque `variable_header_format_default` (`hdr_format`) fija el header de ráfaga:
+**access code** `digital.packet_utils.default_access_code` (64 bits), **threshold** `0`
+y **bps** `1`. El formatter emite **solo el header** en bytes empaquetados
+(access code + longitud de 16 bits repetida), y el mux antepone ese header al payload.
 
 ### RX — `rx_bladerf.grc` (BladeRF)
 
 ```
 BladeRF source            (gr-bladeRF; sample_rate=20e6, center_freq=2.45e9, gain=40)
    ▼
-GMSK Demod                (digital.gmsk_demod, samples/symbol=8, gain=1.0)
+GMSK Demod                (digital.gmsk_demod, samples/symbol=8, gain_mu=0.175, freq_error=0.0)
    ▼
-Tagged Stream to PDU      (blocks.tagged_stream_to_pdu, Type: byte, Len Tag Key: packet_len)
+Correlate Access Code     (digital.correlate_access_code_bb_ts, access_code=default, threshold=0, Tagname: packet_len)
+   ▼  (emite contenido del paquete en bits, con tag de longitud en bits)
+Repack Bits 1→8           (blocks.repack_bits_bb, k=1, l=8, Len Tag: packet_len, endianness=MSB_FIRST)
+   ▼  (bits → bytes, tag vuelto a bytes)
+Tagged Stream to PDU      (tagged_stream_to_pdu, Type: byte, Len Tag Key: packet_len)
    ▼ (msg port: out → in)
 ZMQ PUSH Message Sink     (tcp://127.0.0.1:5556, timeout=100, mode=bind)
 ```
+
+El correlator encuentra el access code en la secuencia de bits, lee el header de
+32 bits (longitud de 16 bits *bytes* repetida), emite el payload en bits y etiqueta
+`packet_len` (bits). `repack_bits_bb(1→8)` empaqueta de vuelta a bytes y reescribe
+el tag en bytes, que es lo que espera `pdu_tagged_stream_to_pdu`.
+
+> **Access code** y **umbral** deben coincidir entre TX y RX. En los flowgraphs de
+> referencia ambos usan `digital.packet_utils.default_access_code` con `threshold=0`.
 
 ## Endpoints
 
@@ -98,7 +125,9 @@ TX del transport emite lo mismo sobre 5555.
 - [ ] TX flowgraph arrancado y **connect** a `5555` (sin error).
 - [ ] `capture.py` con `TRANSPORT="radio"`; el TX PULL recibe PDUs (`cons(dict, u8vector)`).
 - [ ] El RX PUSH emite PDUs que decodifica `radio/pmt_codec.py` (bytes H.264 del receptor).
+- [ ] `hdr_format` (access code) y el correlator coinciden entre TX y RX.
 - [ ] Link de RF 2.45 GHz / 20 Msps: sin pérdida de de-sincronización GMSK,
       `packet_len` consistente entre TX y RX. Ambos extremos usan osciladores libres,
       por lo que puede ser necesario ajustar `freq_error` o `omega_relative_limit`
-      del GMSK Demod para compensar el offset de frecuencia.
+      del GMSK Demod para compensar el offset de frecuencia, así como subir el
+      `threshold` del correlator si el acceso por radio degrada el bit error rate.

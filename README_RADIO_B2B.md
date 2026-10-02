@@ -36,6 +36,11 @@ Puntos clave:
   **No necesita cámara** y **no ejecuta** `capture.py`.
 - Parámetros RF fijos: **2.45 GHz**, **20 Msps**, GMSK **8 sps** (ampliables desde
   `radio/flowgraphs/tx_bladerf.grc` y `rx_bladerf.grc`).
+- Cada paquete viaja como una **ráfaga con access code + header de longitud**
+  (`digital.packet_utils.default_access_code`, 64 bits). El TX antepone el access
+  code y la longitud de 16 bits (formatter); el RX correlaciona el access code y
+  repaquetiza bits → bytes (correlator + repack). TX y RX deben usar el mismo
+  access code (`hdr_format` y correlator).
 
 ---
 
@@ -226,6 +231,7 @@ Debería abrir una ventana de **ffplay** reproduciendo el video recibido por RF.
 - [ ] B: RX en 2.45 GHz / 20 Msps / 8 sps → `python radio/flowgraphs/rx_bladerf.py` (bind).
 - [ ] A: `python capture.py` publica PDUs en 5555 (bind).
 - [ ] B: `python radio/reciever_radio.py` decodifica PDUs de 5556 (connect).
+- [ ] TX (`hdr_format`) y RX (correlator) usan el mismo access code (por defecto `default_access_code`).
 - [ ] Venta de ffplay mostrando video.
 
 ---
@@ -246,7 +252,16 @@ sincronía:
 grcc -o radio/flowgraphs/ radio/flowgraphs/rx_bladerf.grc
 ```
 
-3. Verifica ganancia RX en `bladeRF_source` (`gain0`, típico `40`) y que la
+3. El correlator (`digital_correlate_access_code_bb_ts`) usa un **threshold** de
+   `0` (coincidencia exacta del access code). Si la señal llega degradada y no se
+   detectan paquetes, súbelo a `3` en ambos extremos (el umbral de `hdr_format`
+   del TX y el del correlator del RX deben coincidir) y recompila:
+
+```bash
+grcc -o radio/flowgraphs/ radio/flowgraphs/tx_bladerf.grc radio/flowgraphs/rx_bladerf.grc
+```
+
+4. Verifica ganancia RX en `bladeRF_source` (`gain0`, típico `40`) y que la
    distancia/atenuación entre antenas permita recibir señal.
 
 ---
