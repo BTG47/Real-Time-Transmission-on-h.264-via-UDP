@@ -262,6 +262,10 @@ python capture.py
 
 ## Modo radio (GNU Radio + SDR)
 
+> Para el enlace **blade→blade a 2.45 GHz entre dos computadoras**, instala y
+> arranca siguiendo
+> **[`README_RADIO_B2B.md`](README_RADIO_B2B.md)** (guía copia-y-pega por computadora).
+
 Alterna transporte con `TRANSPORT = "radio"` en `config.py` (por defecto `"udp"`):
 
 pip install -r requirements-radio.txt   # solo pyzmq

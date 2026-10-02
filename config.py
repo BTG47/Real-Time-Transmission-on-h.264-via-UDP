@@ -23,3 +23,7 @@ CRITICAL_VALUES = [7,8]               # 'SPS', 'PPS'
 HIGH_VALUES = [5]                     # IDR slice
 NORMAL_VALUES = [1]                   # non-IDR slice, otro
 LOW_VALUES = [6]                      # SEI
+
+# Configuración del scheduler de paquetes (colas con límite y descarte de antiguos)
+SCHEDULER_MAX_ENTRIES_PER_QUEUE = 32  # Máx. grupos de NALU por cola de prioridad
+SCHEDULER_MAX_AGE_MS = 500            # Vejez máxima de un grupo en cola antes de descartarlo
